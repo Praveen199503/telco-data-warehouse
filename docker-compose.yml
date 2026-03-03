@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: telco_postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: telco_user
+      POSTGRES_PASSWORD: telco_pass
+      POSTGRES_DB: telco_db
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telco_user -d telco_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
