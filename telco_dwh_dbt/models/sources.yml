@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: staging
+    description: "Raw staging data loaded by Airflow ETL pipeline"
+    schema: staging
+    database: telco_db
+
+    tables:
+      - name: stg_customers
+        description: "Customer records loaded by Airflow"
+
+      - name: stg_service_plans
+        description: "Service plan records"
+
+      - name: stg_subscriptions
+        description: "Customer subscription records"
+
+      - name: stg_service_usage
+        description: "Weekly service usage records"
+
+      - name: stg_billing_events
+        description: "Monthly billing event records"

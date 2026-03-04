@@ -1,0 +1,40 @@
+# ============================================================
+# dbt_project.yml
+# Main configuration for the Telco DBT project
+# ============================================================
+
+name: 'telco_dwh_dbt'
+version: '1.0.0'
+config-version: 2
+
+# Which profile to use for DB connection (defined in profiles.yml)
+profile: 'telco_dwh_dbt'
+
+model-paths:      ["models"]
+snapshot-paths:   ["snapshots"]
+test-paths:       ["tests"]
+macro-paths:      ["macros"]
+seed-paths:       ["seeds"]
+target-path:      "target"
+clean-targets:    ["target", "dbt_packages"]
+
+# ── Model Materializations ──
+models:
+  telco_dwh_dbt:
+    staging:
+      +materialized: view
+      +schema: staging          # builds in staging schema in DB
+
+    marts:
+      +materialized: table
+      +schema: dwh              # builds in dwh schema in DB
+      dimensions:
+        +materialized: table
+      facts:
+        +materialized: table
+
+# ── Snapshot Config ──
+snapshots:
+  telco_dwh_dbt:
+    +target_schema: dwh
+    +strategy: check           

@@ -1,0 +1,17 @@
+# ============================================================
+# profiles.yml
+# Database connection configuration
+# ============================================================
+
+telco_dwh_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5432
+      dbname: telco_db
+      user: telco_user
+      password: telco_pass
+      schema: dwh
+      threads: 4                # Run up to 4 models in parallel
