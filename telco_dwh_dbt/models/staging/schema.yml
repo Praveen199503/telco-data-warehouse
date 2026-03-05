@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: "Cleaned customer records"
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+      - name: customer_status
+        tests:
+          - accepted_values:
+              values: ['active', 'churned', 'suspended']
+      - name: age_group
+        tests:
+          - accepted_values:
+              values: ['18-25', '26-35', '36-50', '50+']
+
+  - name: stg_service_plans
+    description: "Cleaned service plans"
+    columns:
+      - name: plan_id
+        tests:
+          - unique
+          - not_null
+      - name: plan_type
+        tests:
+          - accepted_values:
+              values: ['prepaid', 'postpaid']
+
+  - name: stg_service_usage
+    description: "Cleaned usage records"
+    columns:
+      - name: usage_id
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+      - name: data_used_gb
+        tests:
+          - assert_positive_value        # Our custom test
+      - name: overage_charges
+        tests:
+          - assert_positive_value
+
+  - name: stg_billing_events
+    description: "Cleaned billing records"
+    columns:
+      - name: billing_id
+        tests:
+          - unique
+          - not_null
+      - name: amount_due
+        tests:
+          - assert_positive_value
+      - name: billing_date
+        tests:
+          - assert_date_in_range:        # Our custom test
+              min_date: '2024-01-01'
+              max_date: '2024-12-31'
