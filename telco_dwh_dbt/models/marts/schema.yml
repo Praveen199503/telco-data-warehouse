@@ -1,0 +1,67 @@
+version: 2
+
+models:
+  - name: dim_customer
+    description: "Customer dimension with SCD Type 1, 2, 3"
+    columns:
+      - name: customer_key
+        tests:
+          - unique            # Test 1
+          - not_null          # Test 2
+      - name: customer_id
+        tests:
+          - not_null          # Test 3
+      - name: customer_status
+        tests:
+          - accepted_values:
+              values: ['active', 'churned', 'suspended']
+
+  - name: dim_service_plan
+    description: "Service plan dimension"
+    columns:
+      - name: plan_key
+        tests:
+          - unique            # Test 4
+          - not_null          # Test 5
+      - name: monthly_fee
+        tests:
+          - assert_positive_value   # Test 6 (custom)
+
+  - name: fact_billing_events
+    description: "Billing fact table"
+    columns:
+      - name: billing_key
+        tests:
+          - unique
+          - not_null
+      - name: customer_key
+        tests:
+          - not_null
+          - relationships:          # Test 7
+              to: ref('dim_customer')
+              field: customer_key
+      - name: amount_due
+        tests:
+          - assert_positive_value
+      - name: billing_date
+        tests:
+          - assert_date_in_range:   # Test 8 (custom)
+              min_date: '2024-01-01'
+              max_date: '2024-12-31'
+
+  - name: fact_service_usage
+    description: "Service usage fact table"
+    columns:
+      - name: usage_key
+        tests:
+          - unique
+          - not_null
+      - name: customer_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_key
+      - name: data_used_gb
+        tests:
+          - assert_positive_value
