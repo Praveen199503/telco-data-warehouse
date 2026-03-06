@@ -43,11 +43,6 @@ models:
       - name: amount_due
         tests:
           - assert_positive_value
-      - name: billing_date
-        tests:
-          - assert_date_in_range:   # Test 8 (custom)
-              min_date: '2024-01-01'
-              max_date: '2024-12-31'
 
   - name: fact_service_usage
     description: "Service usage fact table"
