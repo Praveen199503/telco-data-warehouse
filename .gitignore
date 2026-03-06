@@ -1,0 +1,19 @@
+# DBT generated files
+telco_dwh_dbt/target/
+telco_dwh_dbt/dbt_packages/
+telco_dwh_dbt/logs/
+telco_dwh_dbt/.user.yml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CSV files (generated data, not needed in repo)
+*.csv
