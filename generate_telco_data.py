@@ -321,6 +321,161 @@ def generate_usage(conn, customer_current_sub):
 
     return usage_records
 
+def generate_billing(conn, customer_current_sub, plans):
+    """
+    Generate monthly billing records.
+    Some customers pay late, some never pay.
+    """
+    log.info("Generating billing events...")
+
+    # Build a quick lookup: plan_id → monthly_fee
+    plan_fees = {p[0]: float(p[2]) for p in plans}
+
+    billing_records = []
+    billing_id = 1
+
+    months = [
+        (date(2024, 1, 1),  date(2024, 1, 31)),
+        (date(2024, 2, 1),  date(2024, 2, 29)),
+        (date(2024, 3, 1),  date(2024, 3, 31)),
+        (date(2024, 4, 1),  date(2024, 4, 30)),
+        (date(2024, 5, 1),  date(2024, 5, 31)),
+        (date(2024, 6, 1),  date(2024, 6, 30)),
+    ]
+
+    for customer_id, sub_info in customer_current_sub.items():
+        sub_id   = sub_info["sub_id"]
+        plan_id  = sub_info["plan_id"]
+        sub_end  = sub_info["end"]
+        base_fee = plan_fees.get(plan_id, 19.99)
+
+        for period_start, period_end in months:
+            if period_start > sub_end:
+                break
+
+            billing_date = period_end + timedelta(days=1)
+            amount_due   = round(base_fee + random.uniform(-2, 5), 2)
+
+            rand = random.random()
+            if rand < BAD_DEBT_RATE:
+                amount_paid    = 0.0
+                payment_date   = None
+                payment_status = "overdue"
+                payment_method = None
+
+            elif rand < BAD_DEBT_RATE + LATE_PAYMENT_RATE:
+                days_late      = random.randint(15, 45)
+                payment_date   = billing_date + timedelta(days=days_late)
+                amount_paid    = amount_due
+                payment_status = "paid"
+                payment_method = random.choice(["credit_card", "bank_transfer", "cash"])
+
+            else:
+                days_to_pay    = random.randint(1, 14)
+                payment_date   = billing_date + timedelta(days=days_to_pay)
+                amount_paid    = amount_due
+                payment_status = "paid"
+                payment_method = random.choice(["credit_card", "bank_transfer", "cash"])
+
+            billing_records.append((
+                billing_id, customer_id, sub_id,
+                billing_date, period_start, period_end,
+                amount_due, amount_paid, payment_date,
+                payment_status, payment_method
+            ))
+            billing_id += 1
+
+    sql = """
+        INSERT INTO source_db.billing_events
+            (billing_id, customer_id, subscription_id, billing_date,
+             billing_period_start, billing_period_end,
+             amount_due, amount_paid, payment_date,
+             payment_status, payment_method)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    """
+
+    chunk_size = 5000
+    for i in range(0, len(billing_records), chunk_size):
+        chunk = billing_records[i:i+chunk_size]
+        with conn.cursor() as cur:
+            execute_batch(cur, sql, chunk, page_size=500)
+        conn.commit()
+        log.info(f"  Billing: inserted {min(i+chunk_size, len(billing_records))}/{len(billing_records)}")
+
+    log.info(f"  ✓ Total billing records: {len(billing_records)}")
+
+
+def generate_support_tickets(conn, customer_current_sub, churners):
+    """
+    Generate support tickets.
+    Churners raise more tickets.
+    """
+    log.info("Generating support tickets...")
+
+    tickets    = []
+    ticket_id  = 1
+
+    issue_types   = ["billing", "technical", "plan_change", "other"]
+    issue_weights = [0.35, 0.30, 0.20, 0.15]
+
+    for customer_id, sub_info in customer_current_sub.items():
+        sub_start = sub_info["start"]
+        sub_end   = sub_info["end"]
+
+        if customer_id in churners:
+            num_tickets = random.choices([0,1,2,3], weights=[0.1,0.3,0.4,0.2])[0]
+        else:
+            num_tickets = random.choices([0,1,2], weights=[0.70,0.25,0.05])[0]
+
+        for _ in range(num_tickets):
+            created = fake.date_between(start_date=sub_start, end_date=sub_end)
+
+            if random.random() > 0.15:
+                status   = "resolved"
+                resolved = created + timedelta(days=random.randint(1, 7))
+                score    = random.choices([1,2,3,4,5], weights=[0.05,0.10,0.25,0.40,0.20])[0]
+            else:
+                status   = random.choice(["open", "escalated"])
+                resolved = None
+                score    = None
+
+            tickets.append((
+                ticket_id, customer_id, created,
+                random.choices(issue_types, weights=issue_weights)[0],
+                random.choice(["low", "medium", "high"]),
+                status, resolved, score
+            ))
+            ticket_id += 1
+
+    sql = """
+        INSERT INTO source_db.support_tickets
+            (ticket_id, customer_id, created_date, issue_type,
+             priority, status, resolved_date, satisfaction_score)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+    """
+
+    with conn.cursor() as cur:
+        execute_batch(cur, sql, tickets, page_size=500)
+    conn.commit()
+
+    log.info(f"  ✓ Total support tickets: {len(tickets)}")
+
+
+def update_churned_customers(conn, churners):
+    """Update customer_status to churned"""
+    log.info(f"Updating {len(churners)} churned customers...")
+
+    sql = """
+        UPDATE source_db.customers
+        SET customer_status = 'churned', updated_at = CURRENT_TIMESTAMP
+        WHERE customer_id = %s
+    """
+
+    with conn.cursor() as cur:
+        execute_batch(cur, sql, [(c,) for c in churners], page_size=500)
+    conn.commit()
+    log.info(f"  ✓ Marked {len(churners)} customers as churned")
+
 
 # ============================================================
 # Main Execution Flow
@@ -335,10 +490,19 @@ def main():
         plans = insert_service_plans(conn)
         customers = generate_customers()
         insert_customers(conn, customers)
-        customer_current_sub, churners = generate_subscriptions(conn, customers, plans)
+        customer_current_sub, churners = generate_subscriptions(
+            conn, customers, plans
+        )
         generate_usage(conn, customer_current_sub)
+        generate_billing(conn, customer_current_sub, plans)
+        generate_support_tickets(conn, customer_current_sub, churners)
+        update_churned_customers(conn, churners)
 
-        log.info("TELCO DATA GENERATION COMPLETED")
+        log.info("=" * 60)
+        log.info("TELCO DATA GENERATION COMPLETED!")
+        log.info(f"  Customers:    {NUM_CUSTOMERS:,}")
+        log.info(f"  Churned:      {int(NUM_CUSTOMERS * CHURN_RATE):,}")
+        log.info("=" * 60)
 
     except Exception as e:
         log.error(f"Error during data generation: {e}")
@@ -352,3 +516,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
